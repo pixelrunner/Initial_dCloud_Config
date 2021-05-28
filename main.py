@@ -30,6 +30,7 @@ class Device:
 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        #close the connection
         if not type(self.conn) == str:
             try:
                 self.conn.close()
