@@ -89,15 +89,12 @@ class Device:
             return response
 
 
-    def config_mode(self):
-        self.send(' en', False)
-        self.send('conf t', False)
 
     def run_script(self, config_mode, filepath):
         if type(self.conn) != str:
+            self.send(' en', False)
             if config_mode:
-                self.config_mode()
-
+                self.send('conf t', False)
             with open(filepath) as script:
                 line = script.readline()
                 print('\nRunning script on ' + self.name + '...')
@@ -137,11 +134,15 @@ def check_ping(ip):
 def main():
     # check ping to server to make sure VPN is up
     if check_ping('198.18.128.96'):
+        term_serv = Device('Terminal Services', '198.18.128.96', 23, 'cxadmin', 'C1sco12345', 'C1sco12345')
+        term_serv.run_script(False, './base_configs/Clear_Lines.txt')
+
+        '''
         edge1 = Device('Edge 1', '198.18.128.96', 2024, 'dnacadmin', 'C1sco12345', 'C1sco12345')
         edge2 = Device('Edge 2', '198.18.128.96', 2025, 'dnacadmin', 'C1sco12345', 'C1sco12345')
         core = Device('Core', '198.18.128.96', 2023, 'dnacadmin', 'C1sco12345', 'C1sco12345')
         fusion = Device('Fusion', '198.18.128.96', 2022, 'dnacadmin', 'C1sco12345', 'C1sco12345')
-        term_serv = Device('Terminal Services', '', 23, '', 'C1sco12345', 'C1sco12345')
+
 
         print('\n')
 
@@ -149,7 +150,7 @@ def main():
         edge2.run_script(True, './base_configs/Edge2a.txt')
         core.run_script(True, './base_configs/Core.txt')
         fusion.run_script(True, './base_configs/Fusion.txt')
-
+        '''
         print('\nAll scripts complete!')
     else:
         print('ConnectionError: Check the VPN and try again')
