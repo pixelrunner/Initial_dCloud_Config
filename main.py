@@ -24,9 +24,10 @@ class Device:
         self.conn = self.create_connection()
 
         if type(self.conn) != str:
-            print('Connection made to ' + self.name)
+            self.check_opening_conn()
+            print('\nConnection made to ' + self.name)
         else:
-            print('Connection not opened to ' + self.name + '.')
+            print('\nConnection not opened to ' + self.name + '.')
 
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -38,40 +39,21 @@ class Device:
                 print('Connection not closed to ' + self.name)
 
 
+    def check_opening_conn(self):
+        # TODO: Deal with autoinstall prompt
+        self.conn.write(b'\n')
+        testreturn = str(self.conn.read_eager())
+        # if str(self.conn.read_eager()) == '':
+        if testreturn == 'Would you like to enter the initial configuration dialog? [yes/no]:':
+            self.conn.write('no\n')
+            testreturn = str(self.conn.read_eager())
+
+
     def create_connection(self):
-        # first just try and create a connection, if that fails, then troubleshoot!
         try:
             connection = telnetlib.Telnet(self.ip, self.port, timeout=TIMEOUT)
         except:
-            print ('\nConnection failed to ' + self.name + ' switch. Clearing the lines. Please wait...', end = '')
-            if self.name == 'Edge 2':
-                response = requests.get('http://198.18.134.139/clear_line/edge_switch_1')
-            elif self.name == 'Edge 1':
-                response = requests.get('http://198.18.134.139/clear_line/edge_switch_0')
-            elif self.name == 'Core':
-                response = requests.get('http://198.18.134.139/clear_line/core')
-            elif self.name == 'Fusion':
-                response = requests.get('http://198.18.134.139/clear_line/fusion')
-            else:
-                return 'FAILED'
-
-            # then try reconnecting
-            countdown = 120
-            while countdown > 0:
-                try:
-                    print('.', end = '')
-                    if DEBUG: print('DEBUG: Countdown timer: ' + str(countdown))
-                    if DEBUG: print('DEBUG: attempt connection')
-                    connection = telnetlib.Telnet(self.ip, self.port, timeout=TIMEOUT)
-                    break
-                except:
-                    countdown -= TIMEOUT
-                    time.sleep(TIMEOUT)
-
-            if countdown < 1:
-                connection = 'FAILED'
-            # print('Connection made to ' + self.name)
-            print('.')
+            return 'FAILED'
         return connection
 
 
@@ -90,11 +72,13 @@ class Device:
 
 
 
-    def run_script(self, config_mode, filepath):
+    def run_script(self, enable_mode, config_mode, filepath):
         if type(self.conn) != str:
-            self.send(' en', False)
-            if config_mode:
-                self.send('conf t', False)
+            if enable_mode:
+                self.send(' en', False)
+                if config_mode:
+                    self.send('conf t', False)
+
             with open(filepath) as script:
                 line = script.readline()
                 print('\nRunning script on ' + self.name + '...')
@@ -134,25 +118,35 @@ def check_ping(ip):
 def main():
     # check ping to server to make sure VPN is up
     if check_ping('198.18.128.96'):
-        term_serv = Device('Terminal Services', '198.18.128.96', 23, 'cxadmin', 'C1sco12345', 'C1sco12345')
-        term_serv.run_script(False, './base_configs/Clear_Lines.txt')
+        term_serv = Device('Terminal Services Server', '198.18.128.96', 23, 'cxadmin', 'C1sco12345', 'C1sco12345')
+        if type(term_serv.conn) != str:
+            conn_failed = False
 
-        '''
-        edge1 = Device('Edge 1', '198.18.128.96', 2024, 'dnacadmin', 'C1sco12345', 'C1sco12345')
-        edge2 = Device('Edge 2', '198.18.128.96', 2025, 'dnacadmin', 'C1sco12345', 'C1sco12345')
-        core = Device('Core', '198.18.128.96', 2023, 'dnacadmin', 'C1sco12345', 'C1sco12345')
-        fusion = Device('Fusion', '198.18.128.96', 2022, 'dnacadmin', 'C1sco12345', 'C1sco12345')
+            term_serv.run_script(False, False, './base_configs/Clear_Lines.txt')
+            # TODO: Check which lines are which from script
 
-
-        print('\n')
-
-        edge1.run_script(True, './base_configs/Edge1a.txt')
-        edge2.run_script(True, './base_configs/Edge2a.txt')
-        core.run_script(True, './base_configs/Core.txt')
-        fusion.run_script(True, './base_configs/Fusion.txt')
-        '''
-        print('\nAll scripts complete!')
+            # edge1 = Device('Edge 1', '198.18.128.96', 2024, 'dnacadmin', 'C1sco12345', 'C1sco12345')
+            '''
+            edge2 = Device('Edge 2', '198.18.128.96', 2025, 'dnacadmin', 'C1sco12345', 'C1sco12345')
+            core = Device('Core', '198.18.128.96', 2023, 'dnacadmin', 'C1sco12345', 'C1sco12345')
+            fusion = Device('Fusion', '198.18.128.96', 2022, 'dnacadmin', 'C1sco12345', 'C1sco12345')
+            '''
+    
+            print('\n')
+    
+            # edge1.run_script(True, True, './base_configs/Edge1a.txt')
+            '''
+            edge2.run_script(True, './base_configs/Edge2a.txt')
+            core.run_script(True, './base_configs/Core.txt')
+            fusion.run_script(True, './base_configs/Fusion.txt')
+            '''
+            print('\nAll scripts complete!')
+        else:
+            conn_failed = True
     else:
+        conn_failed = True
+
+    if conn_failed:
         print('ConnectionError: Check the VPN and try again')
 
 if __name__ == '__main__':
