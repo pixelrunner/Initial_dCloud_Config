@@ -19,7 +19,7 @@ def get_token(dnac_ip):
     return Token
 
 Token = get_token(ip)
-# headers = {"x-auth-token":Token,"Content-type":"application/json","accept":"application/json"}
+headers = {"x-auth-token":Token,"Content-type":"application/json","accept":"application/json"}
 
 """GETTING SITES"""
 
@@ -95,18 +95,19 @@ def create_sites(dnac_ip, Token, payload,method, siteId=""):
         print("Site request successfully submitted ")
         exec_id = site_create.json()['executionId']
         execution_status_url = f"https://{dnac_ip}/dna/platform/management/business-api/v1/execution-status/{exec_id}"
-        status = requests.get(execution_status_url, headers=headers, verify=False).json()
-        while status['status']!='SUCCESS':
+        status = requests.get(execution_status_url, headers=headers, verify=False).json()['status']
+        while status!='SUCCESS':
             #print(status['status'])
             print("Site creation/update in progress...")
             time.sleep(2)
-            status = requests.get(execution_status_url, headers=headers, verify=False).json()
-            if status['status']=='FAILURE':
-                error = json.loads(status['bapiError'])
+            site_status = requests.get(execution_status_url, headers=headers, verify=False).json()
+            status = site_status['status']
+            if status == 'FAILURE':
+                error = json.loads(site_status['bapiError'])
                 print("Error creating site:", error['result']['result'])
-            break
-        if status['status']=='SUCCESS':
-            print("SITE SUCCESSFULLY CREATED/UPDATED!")
+                break
+        if status =='SUCCESS':
+                print("SITE SUCCESSFULLY CREATED/UPDATED!")
             
     else:
         print("An unexpected error has occurred")
@@ -127,16 +128,7 @@ RTP_10 = create_sites(ip, Token, building_payload, "put", siteId=id_dict['RTP10'
 print("SITE HIERARCHY SUCESSFULLY UPDATED")
 
 
-# """GETTING SITES"""
-# sites = get_sites(ip, Token)
-# #print(json.dumps(sites,indent=2))
 
-# for item in sites['response']:
-#     if item["name"] == "RTP10":
-
-#         RTP_10_id = item["id"]
-        
-#         print("The site ID for RTP10 is: ", RTP_10_id)
 
 """CREATING CREDENTIALS.
 # This script only creates SNMP credentials (Read and Write) because the dcloud lab already has the CLI credentials configured.
@@ -160,26 +152,24 @@ def create_credentials(dnac_ip, Token, cred_payload):
         #print(json.dumps(cred_create, indent=4))
         exec_id = cred_create.json()["executionId"]
         status_url = f"https://{dnac_ip}/dna/platform/management/business-api/v1/execution-status/{exec_id}"
-        status = requests.get(status_url, headers=headers, verify=False).json()
+        credstatus = requests.get(status_url, headers=headers, verify=False).json()
         #print("CREDENTIALS STATUS INFO: ", status)
-        while status['status']!='SUCCESS':
+        status = credstatus['status']
+        while status !='SUCCESS':
             print("Creating SNMP credentials...")
             #print(status)
             time.sleep(2)
-            status = requests.get(status_url, headers=headers, verify=False).json()
-            if status['status']=='FAILURE':
-                error = json.loads(status['bapiError'])
+            credstatus = requests.get(status_url, headers=headers, verify=False).json()
+            status = credstatus['status']
+            if status == 'IN_PROGRESS':
+                print("Credentials creation task in progress")
+            elif status == 'FAILURE':
+                error = json.loads(credstatus['bapiError'])
                 print("Error creating credentials:", error['errorMessage'])
-            break
-        if status['status']=='SUCCESS':
+                break
+        if status == 'SUCCESS':
             print("SNMP CREDENTIALS SUCCESSFULLY CREATED!")
             
-    else:
-        print("An unexpected error has occurred")
-        print(cred_create.json())
-
-
-
 cred_payload = {
     "settings": {
         
@@ -203,7 +193,7 @@ print("Creating device credentials")
 create_credentials(ip, Token, cred_payload)
 
 """CREATING DISCOVERIES
-This creates two discovery tasks: "Edge_Discovery" and "Fusion&Core" and start discovering Edge, Core and Fusion switches.
+This creates two discovery tasks: "Edge_Discovery" and "Fusion&Core" and start discovering Edge1, Edge2, Core, and Fusion switches.
 """
 
 def discovery(dnac_ip, name, ip_range, Token):
@@ -241,13 +231,15 @@ def discovery(dnac_ip, name, ip_range, Token):
 print("Creating and starting discoveries...")
 Edge_discovery = discovery(ip, "Edge_Discovery", "172.16.13.70-172.16.13.71", Token )
 Core_discovery = discovery(ip, "Fusion&Core", "172.16.10.103-172.16.10.104", Token)
-
 print("Waiting for discoveries to complete")
-time.sleep(20)
+time.sleep(10)
+
 
 """ASSIGNING DEVICES TO RTP10"""
 
+
 def get_devices(dnac_ip):
+    #print('Getting device list')
     device_url = f"https://{dnac_ip}/dna/intent/api/v1/network-device"
     #Token = get_token(dnac_ip)
     headers = {"x-auth-token":Token,"Content-type":"application/json","accept":"application/json"}
@@ -255,6 +247,7 @@ def get_devices(dnac_ip):
     return devices
 
 def assign_device(dnac_ip, assign_payload, siteId ):
+    print('Assigning devices')
     headers = {"x-auth-token":Token,"Content-type":"application/json","accept":"application/json"}
     assign_url = f"https://{dnac_ip}/dna/system/api/v1/site/{siteId}/device"
     assign = requests.post(assign_url, headers=headers, data = (json.dumps(assign_payload)), verify=False)
@@ -272,6 +265,9 @@ def assign_device(dnac_ip, assign_payload, siteId ):
             #print("Execution Status: ", execution_status)
         if execution_status['status']=='SUCCESS':
             print("Device Successfully assigned to site!")
+        else:
+            print("It looks like something went wrong. See more details below:")
+            print(execution_status['status'])
     else:
         print("Unextpected error occurred assigning devices. Status code:", assign.status_code)
         print("Trying again...")
@@ -279,6 +275,11 @@ def assign_device(dnac_ip, assign_payload, siteId ):
         return devices
 
 devices = get_devices(ip)
+
+while len(devices['response'])==0:
+    print ("No device has been discovered yet.\nWaiting for discoveries to complete")
+    time.sleep(2)
+    devices = get_devices(ip)
 
 check_list = {}
 while len(check_list)<4:
